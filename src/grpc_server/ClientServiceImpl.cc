@@ -19,7 +19,7 @@ ClientServiceImpl::ClientServiceImpl(RunService& run_svc, LogService& log_svc)
 // ── Handle a TestResultBatch ──────────────────────────────────────────────────
 
 void ClientServiceImpl::handle_result_batch(
-    const zion::stream::TestResultBatch& batch,
+    const acadia::stream::TestResultBatch& batch,
     BoundedQueue<IngestWork>&              queue) {
 
     const std::string mode = std::to_string(static_cast<int>(batch.mode()));
@@ -70,7 +70,7 @@ void ClientServiceImpl::handle_result_batch(
 
 // ── Handle a LogBatch ────────────────────────────────────────────────────────
 
-void ClientServiceImpl::handle_log_batch(const zion::stream::LogBatch& batch) {
+void ClientServiceImpl::handle_log_batch(const acadia::stream::LogBatch& batch) {
     for (const auto& line : batch.lines()) {
         LogEntry e;
         e.run_id   = line.run_id().empty() ? batch.run_id() : line.run_id();
@@ -85,8 +85,8 @@ void ClientServiceImpl::handle_log_batch(const zion::stream::LogBatch& batch) {
 
 ::grpc::Status ClientServiceImpl::Connect(
     ::grpc::ServerContext* ctx,
-    ::grpc::ServerReaderWriter<zion::stream::ServerMessage,
-                                zion::stream::ClientMessage>* stream) {
+    ::grpc::ServerReaderWriter<acadia::stream::ServerMessage,
+                                acadia::stream::ClientMessage>* stream) {
 
     BoundedQueue<IngestWork> queue{kQueueCapacity};
     std::atomic<bool> writer_ok{true};
@@ -107,22 +107,22 @@ void ClientServiceImpl::handle_log_batch(const zion::stream::LogBatch& batch) {
         }
     }};
 
-    zion::stream::ClientMessage msg;
+    acadia::stream::ClientMessage msg;
     while (!ctx->IsCancelled() && stream->Read(&msg)) {
         switch (msg.payload_case()) {
-        case zion::stream::ClientMessage::kHello: {
+        case acadia::stream::ClientMessage::kHello: {
             const auto& hello = msg.hello();
             spdlog::info("client_svc: HelloReport board_id={} client_ver={}",
                          hello.board_id(), hello.client_version());
             break;
         }
 
-        case zion::stream::ClientMessage::kResultBatch: {
+        case acadia::stream::ClientMessage::kResultBatch: {
             const auto& batch = msg.result_batch();
             handle_result_batch(batch, queue);
 
             // Send BatchAck.
-            zion::stream::ServerMessage ack_msg;
+            acadia::stream::ServerMessage ack_msg;
             auto* ack = ack_msg.mutable_batch_ack();
             ack->set_run_id(batch.run_id());
             ack->set_batch_seq(batch.batch_seq());
@@ -139,12 +139,12 @@ void ClientServiceImpl::handle_log_batch(const zion::stream::LogBatch& batch) {
             break;
         }
 
-        case zion::stream::ClientMessage::kLogBatch: {
+        case acadia::stream::ClientMessage::kLogBatch: {
             const auto& batch = msg.log_batch();
             handle_log_batch(batch);
 
             // Send LogBatchAck.
-            zion::stream::ServerMessage ack_msg;
+            acadia::stream::ServerMessage ack_msg;
             auto* ack = ack_msg.mutable_log_batch_ack();
             ack->set_run_id(batch.run_id());
             ack->set_batch_seq(batch.batch_seq());
@@ -154,14 +154,14 @@ void ClientServiceImpl::handle_log_batch(const zion::stream::LogBatch& batch) {
             break;
         }
 
-        case zion::stream::ClientMessage::kStateReport: {
+        case acadia::stream::ClientMessage::kStateReport: {
             // Log heartbeat; no response required.
             spdlog::debug("client_svc: StateReport board_id={}",
                           msg.state_report().board_id());
             break;
         }
 
-        case zion::stream::ClientMessage::kConfigureAck: {
+        case acadia::stream::ClientMessage::kConfigureAck: {
             const auto& ack = msg.configure_ack();
             if (!ack.ok()) {
                 spdlog::warn("client_svc: ConfigureAck NACK run_id={} field={} error={}",

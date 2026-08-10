@@ -1,5 +1,5 @@
 #pragma once
-// grpc_server/ClientServiceImpl.h — implements the zion::stream::ClientService bidi stream.
+// grpc_server/ClientServiceImpl.h — implements the acadia::stream::ClientService bidi stream.
 //
 // The Client (on-target device) sends ClientMessage frames over a single persistent stream.
 // This implementation:
@@ -29,14 +29,14 @@
 namespace zion::grpc {
 
 class ClientServiceImpl final
-    : public zion::stream::ClientService::Service {
+    : public acadia::stream::ClientService::Service {
 public:
     ClientServiceImpl(RunService& run_svc, LogService& log_svc);
 
     ::grpc::Status Connect(
         ::grpc::ServerContext*                                                    ctx,
-        ::grpc::ServerReaderWriter<zion::stream::ServerMessage,
-                                   zion::stream::ClientMessage>* stream) override;
+        ::grpc::ServerReaderWriter<acadia::stream::ServerMessage,
+                                   acadia::stream::ClientMessage>* stream) override;
 
 private:
     struct IngestWork {
@@ -52,11 +52,11 @@ private:
 
     // Process a single TestResultBatch, enqueue each sample for DB write.
     void handle_result_batch(
-        const zion::stream::TestResultBatch& batch,
+        const acadia::stream::TestResultBatch& batch,
         BoundedQueue<IngestWork>&              queue);
 
     // Process a single LogBatch.
-    void handle_log_batch(const zion::stream::LogBatch& batch);
+    void handle_log_batch(const acadia::stream::LogBatch& batch);
 };
 
 }  // namespace zion::grpc
