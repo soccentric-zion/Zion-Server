@@ -1,0 +1,90 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-test:
+    name: Build on ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux/amd64
+          - os: ubuntu-22.04-arm64  # GitHub ARM runners
+            platform: linux/arm64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check Docker prerequisites
+        run: |
+          cd docker
+          chmod +x check-prereqs.sh
+          ./check-prereqs.sh || true
+
+      - name: Build Docker image
+        run: |
+          cd docker
+          docker buildx build \
+            --platform ${{ matrix.platform }} \
+            --build-arg UID=1000 \
+            --build-arg GID=1000 \
+            --load \
+            -f Dockerfile.unified \
+            -t zion-server:ci \
+            ..
+
+      - name: Start PostgreSQL
+        run: |
+          cd docker
+          docker compose -f docker-compose.yml up -d postgres
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if docker exec zion-postgres pg_isready -U zion; then
+              echo "PostgreSQL ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Build project in container
+        run: |
+          docker run --rm \
+            --network docker_zion-net \
+            -v ${{ github.workspace }}:/workspace \
+            -e ZION_DB_HOST=postgres \
+            zion-server:ci \
+            bash -c "cmake --preset debug && cmake --build build/debug --parallel"
+
+      - name: Run tests
+        run: |
+          docker run --rm \
+            --network docker_zion-net \
+            -v ${{ github.workspace }}:/workspace \
+            -e ZION_DB_HOST=postgres \
+            zion-server:ci \
+            bash -c "ctest --test-dir build/debug --output-on-failure"
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker/docker-compose.yml logs
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose.yml down -v

@@ -1,0 +1,2 @@
+#pragma once
+#define ZION_SERVER_VERSION "@PROJECT_VERSION@"

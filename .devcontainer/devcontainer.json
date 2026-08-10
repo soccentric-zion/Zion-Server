@@ -1,0 +1,60 @@
+{
+    "name": "Zion Server Dev",
+    "dockerComposeFile": [
+        "../docker/docker-compose.dev.yml"
+    ],
+    "service": "zion-dev",
+    "workspaceFolder": "/workspace",
+    // Files to mount from host
+    "mounts": [
+        "source=${localEnv:HOME}/.ssh,target=/home/builder/.ssh,readonly,type=bind",
+        "source=${localEnv:HOME}/.gitconfig,target=/home/builder/.gitconfig,readonly,type=bind"
+    ],
+    // Ports to forward automatically
+    "forwardPorts": [
+        5432,
+        8080,
+        9100,
+        50051
+    ],
+    "portsAttributes": {
+        "5432": {
+            "label": "PostgreSQL"
+        },
+        "8080": {
+            "label": "HTTP API"
+        },
+        "9100": {
+            "label": "Metrics"
+        },
+        "50051": {
+            "label": "gRPC"
+        }
+    },
+    // Run commands after container is created
+    "postCreateCommand": "echo '✓ Zion dev container ready'",
+    // VS Code extensions to install
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "llvm-vs-code-extensions.vscode-clangd",
+                "twxs.cmake",
+                "ms-azuretools.vscode-docker",
+                "eamodio.gitlens",
+                "gruntfuggly.todo-tree"
+            ],
+            "settings": {
+                "cmake.configureOnOpen": false,
+                "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+            }
+        }
+    },
+    // Use builder user (non-root)
+    "remoteUser": "builder",
+    // Features
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {}
+    }
+}

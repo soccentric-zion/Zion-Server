@@ -1,0 +1,90 @@
+# Build artifacts
+build/
+build-*/
+bin/
+lib/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vs/
+.vscode-server/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+.directory
+
+# Git
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Documentation (don't need in container)
+*.md
+docs/
+AUDIT.md
+README.md
+req.md
+server_update/
+
+# Docker files themselves
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Environment
+.env
+.env.*
+
+# Testing artifacts
+*.gcda
+*.gcno
+*.gcov
+coverage/
+Testing/
+callgrind.out.*
+massif.out.*
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+# Scripts (some may be needed, but exclude from context by default)
+scripts/*.sh
+
+# Node/npm (if any)
+node_modules/
+package-lock.json
+
+# Python (if any)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.venv/
+
+# CI/CD
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+azure-pipelines.yml

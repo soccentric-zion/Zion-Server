@@ -1,0 +1,87 @@
+IMAGE_NAME ?= zion
+
+.PHONY: help check build build-unified build-server run clean delete-images up down logs shell
+
+# Default target
+help:
+	@echo "Zion Docker Makefile"
+	@echo ""
+	@echo "Recommended commands:"
+	@echo "  make setup        - One-command setup (runs setup.sh)"
+	@echo "  make check        - Check Docker prerequisites"
+	@echo "  make up           - Start dev environment (docker-compose)"
+	@echo "  make shell        - Enter dev container"
+	@echo "  make logs         - View container logs"
+	@echo "  make down         - Stop all containers"
+	@echo ""
+	@echo "Build commands:"
+	@echo "  make build        - Auto-detect platform and build (uses build.sh)"
+	@echo "  make build-arm64  - Build for ARM64 (Raspberry Pi)"
+	@echo "  make build-amd64  - Build for x86_64"
+	@echo ""
+	@echo "Legacy commands (use unified instead):"
+	@echo "  make build-server - Build x86_64 (old Dockerfile.server)"
+	@echo "  make build-pi     - Build ARM64 (old Dockerfile)"
+
+# Recommended: One-command setup
+setup:
+	@./setup.sh
+
+# Check prerequisites
+check:
+	@./check-prereqs.sh
+
+# Unified build (auto-detects platform)
+build:
+	@./build.sh
+
+# Platform-specific builds (unified Dockerfile)
+build-amd64:
+	@docker buildx build --platform linux/amd64 --load \
+	    --build-arg UID=$$(id -u) --build-arg GID=$$(id -g) \
+	    -f Dockerfile.unified -t $(IMAGE_NAME):amd64 ..
+
+build-arm64:
+	@docker buildx build --platform linux/arm64 --load \
+	    --build-arg UID=$$(id -u) --build-arg GID=$$(id -g) \
+	    -f Dockerfile.unified -t $(IMAGE_NAME):arm64 ..
+
+# Docker Compose commands
+up:
+	@docker compose -f docker-compose.dev.yml up -d
+	@echo "Services started. Enter container with: make shell"
+
+down:
+	@docker compose -f docker-compose.dev.yml down
+
+logs:
+	@docker compose -f docker-compose.dev.yml logs -f
+
+shell:
+	@docker exec -it zion-dev bash || echo "Container not running. Start with: make up"
+
+# Legacy builds (kept for backwards compatibility)
+build-pi:
+	@echo "Building Docker image $(IMAGE_NAME) for Raspberry Pi 5 (ARM64)..."
+	docker buildx build --platform linux/arm64 --load --build-arg UID=$$(id -u) --build-arg GID=$$(id -g) -t $(IMAGE_NAME) -f Dockerfile ..
+
+build-server:
+	@echo "Building Docker image $(IMAGE_NAME)-server for x86 Ubuntu 22.04..."
+	docker buildx build --platform linux/amd64 --load \
+	    --build-arg UID=$$(id -u) --build-arg GID=$$(id -g) \
+	    -f Dockerfile.server -t $(IMAGE_NAME)-server ..
+
+run:
+	# No --gpus flag: Pi 5 has VideoCore VII (not CUDA)
+	docker run -it --rm --hostname rpi5 $(IMAGE_NAME)
+
+clean:
+	docker rmi $(IMAGE_NAME) || true
+
+delete-images:
+	@echo "Warning: This will delete ALL Docker images!"
+	@read -p "Are you sure? (y/N) " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+	    docker rmi $$(docker images -q) || true; \
+	fi

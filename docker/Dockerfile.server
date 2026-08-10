@@ -1,0 +1,89 @@
+# Zion Server — x86_64 Ubuntu 22.04 LTS build image
+# Targets: native x86-64 server binary + unit tests
+FROM ubuntu:22.04
+
+ARG UID=1000
+ARG GID=1000
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ─── Build tools + apt-available libraries ────────────────────────────────────
+RUN apt-get update && apt-get install -y \
+    # Build essentials
+    build-essential cmake ninja-build git pkg-config ccache wget sudo \
+    # Protobuf (protoc + headers) and gRPC (includes /usr/bin/grpc_cpp_plugin)
+    protobuf-compiler libprotobuf-dev libprotoc-dev \
+    libgrpc++-dev libgrpc-dev \
+    # TLS
+    libssl-dev \
+    # Drogon runtime dependencies
+    libjsoncpp-dev uuid-dev zlib1g-dev libbrotli-dev \
+    libpq-dev libc-ares-dev \
+    # Logging / testing / auth
+    libspdlog-dev libgtest-dev libargon2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── yaml-cpp 0.8.0 ──────────────────────────────────────────────────────────
+# Ubuntu 22.04 ships 0.7.0 which lacks the yaml-cpp::yaml-cpp CMake target
+# required by CMakeLists.txt.
+RUN git clone --depth=1 --branch 0.8.0 \
+        https://github.com/jbeder/yaml-cpp.git /tmp/yaml-cpp \
+    && cmake -S /tmp/yaml-cpp -B /tmp/yaml-cpp/build \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DYAML_CPP_BUILD_TESTS=OFF \
+    && cmake --build /tmp/yaml-cpp/build --parallel \
+    && cmake --install /tmp/yaml-cpp/build \
+    && rm -rf /tmp/yaml-cpp
+
+# ─── Drogon v1.9.3 ────────────────────────────────────────────────────────────
+# Not packaged for Ubuntu 22.04; must build from source.
+# PostgreSQL support ON; MySQL and SQLite disabled to keep the image lean.
+RUN git clone --depth=1 --branch v1.9.3 \
+        https://github.com/drogonframework/drogon.git /tmp/drogon \
+    && cd /tmp/drogon && git submodule update --init --recursive \
+    && cmake -S . -B build \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_CTL=OFF \
+        -DBUILD_EXAMPLES=OFF \
+        -DBUILD_TESTING=OFF \
+        -DUSE_POSTGRESQL=ON \
+        -DUSE_MYSQL=OFF \
+        -DUSE_SQLITE3=OFF \
+    && cmake --build build --parallel \
+    && cmake --install build \
+    && rm -rf /tmp/drogon
+
+# ─── gRPC cmake config + grpc_cpp_plugin ─────────────────────────────────────
+# Ubuntu 22.04's libgrpc++-dev ships shared libraries but no cmake config files
+# and no grpc_cpp_plugin binary.  We (a) install a hand-written cmake stub that
+# wraps the system libraries and (b) compile the plugin from the 1.30.2 source.
+COPY gRPCConfig.cmake        /usr/lib/x86_64-linux-gnu/cmake/grpc/gRPCConfig.cmake
+COPY gRPCConfigVersion.cmake /usr/lib/x86_64-linux-gnu/cmake/grpc/gRPCConfigVersion.cmake
+RUN git clone --depth=1 --branch v1.30.2 \
+        --filter=blob:none --sparse \
+        https://github.com/grpc/grpc.git /tmp/grpc \
+    && cd /tmp/grpc \
+    && git sparse-checkout set src/compiler \
+    && g++ -std=c++14 -O2 \
+           -o /usr/local/bin/grpc_cpp_plugin \
+           src/compiler/cpp_generator.cc \
+           src/compiler/cpp_plugin.cc \
+           -I . \
+           $(pkg-config --cflags protobuf) -lprotoc -lprotobuf \
+    && rm -rf /tmp/grpc
+
+# ─── Non-root user (mirrors host UID/GID for bind-mount ownership) ───────────
+RUN groupadd -g ${GID} zion \
+    && useradd -m --no-log-init --uid ${UID} --gid ${GID} zion \
+    && usermod -aG sudo zion \
+    && echo "zion ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/zion
+
+USER zion
+
+# ccache: prepend compiler wrapper symlinks so all gcc/g++ invocations are cached
+ENV PATH="/usr/lib/ccache:${PATH}"
+RUN mkdir -p /home/zion/.ccache
+
+WORKDIR /workspace

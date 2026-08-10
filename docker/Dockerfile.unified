@@ -1,0 +1,129 @@
+# Unified multi-platform Dockerfile
+# Auto-detects architecture: works on x86_64 (amd64) and ARM64 (Raspberry Pi 5)
+# Usage: docker buildx build --platform linux/amd64 OR --platform linux/arm64
+FROM ubuntu:22.04
+
+# Build arguments
+ARG UID=1000
+ARG GID=1000
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Display build info for debugging
+RUN echo "Building for: ${TARGETPLATFORM} on ${BUILDPLATFORM}"
+
+# ─── Core build dependencies (platform-agnostic) ──────────────────────────────
+RUN apt-get update && apt-get install -y \
+    # Build essentials
+    build-essential cmake ninja-build git pkg-config ccache wget sudo file \
+    # Protobuf and gRPC
+    protobuf-compiler libprotobuf-dev libprotoc-dev \
+    libgrpc++-dev libgrpc-dev \
+    # TLS
+    libssl-dev \
+    # Drogon runtime dependencies
+    libjsoncpp-dev uuid-dev zlib1g-dev libbrotli-dev \
+    libpq-dev libc-ares-dev \
+    # Database, logging, testing, auth
+    libsqlite3-dev libspdlog-dev libgtest-dev libargon2-dev \
+    # Debugging utilities
+    vim htop curl iputils-ping net-tools \
+    # Boost (if needed)
+    libboost-system-dev libboost-date-time-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ─── yaml-cpp 0.8.0 ───────────────────────────────────────────────────────────
+# Ubuntu 22.04 ships 0.7.0 which lacks the yaml-cpp::yaml-cpp CMake target.
+# Build from source for both platforms.
+RUN git clone --depth=1 --branch 0.8.0 \
+        https://github.com/jbeder/yaml-cpp.git /tmp/yaml-cpp \
+    && cmake -S /tmp/yaml-cpp -B /tmp/yaml-cpp/build \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DYAML_CPP_BUILD_TESTS=OFF \
+        -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /tmp/yaml-cpp/build --parallel \
+    && cmake --install /tmp/yaml-cpp/build \
+    && rm -rf /tmp/yaml-cpp
+
+# ─── toml++ (header-only library) ─────────────────────────────────────────────
+RUN git clone --depth=1 --branch v3.4.0 \
+        https://github.com/marzer/tomlplusplus.git /tmp/tomlplusplus \
+    && cmake -S /tmp/tomlplusplus -B /tmp/tomlplusplus/build \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+    && cmake --install /tmp/tomlplusplus/build \
+    && rm -rf /tmp/tomlplusplus
+
+# ─── Drogon v1.9.3 ────────────────────────────────────────────────────────────
+# Not packaged for Ubuntu 22.04; build from source.
+RUN git clone --depth=1 --branch v1.9.3 \
+        https://github.com/drogonframework/drogon.git /tmp/drogon \
+    && cd /tmp/drogon && git submodule update --init --recursive \
+    && cmake -S . -B build \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_CTL=OFF \
+        -DBUILD_EXAMPLES=OFF \
+        -DBUILD_TESTING=OFF \
+        -DUSE_POSTGRESQL=ON \
+        -DUSE_MYSQL=OFF \
+        -DUSE_SQLITE3=OFF \
+    && cmake --build build --parallel \
+    && cmake --install build \
+    && rm -rf /tmp/drogon
+
+# ─── gRPC cmake config + grpc_cpp_plugin ──────────────────────────────────────
+# Ubuntu 22.04's libgrpc++-dev ships libraries but no CMake config or plugin.
+# Solution: (a) hand-written CMake stub, (b) compile plugin from source.
+# Detect lib path based on architecture
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+        echo "x86_64-linux-gnu" > /tmp/arch_lib; \
+    elif [ "$(uname -m)" = "aarch64" ]; then \
+        echo "aarch64-linux-gnu" > /tmp/arch_lib; \
+    else \
+        echo "UNKNOWN-linux-gnu" > /tmp/arch_lib; \
+    fi
+
+COPY docker/gRPCConfig.cmake /tmp/gRPCConfig.cmake
+COPY docker/gRPCConfigVersion.cmake /tmp/gRPCConfigVersion.cmake
+RUN ARCH_LIB=$(cat /tmp/arch_lib) && \
+    mkdir -p /usr/lib/${ARCH_LIB}/cmake/grpc && \
+    cp /tmp/gRPCConfig.cmake /usr/lib/${ARCH_LIB}/cmake/grpc/ && \
+    cp /tmp/gRPCConfigVersion.cmake /usr/lib/${ARCH_LIB}/cmake/grpc/
+
+# Build grpc_cpp_plugin (platform-agnostic)
+RUN git clone --depth=1 --branch v1.30.2 \
+        --filter=blob:none --sparse \
+        https://github.com/grpc/grpc.git /tmp/grpc \
+    && cd /tmp/grpc \
+    && git sparse-checkout set src/compiler \
+    && g++ -std=c++14 -O2 \
+           -o /usr/local/bin/grpc_cpp_plugin \
+           src/compiler/cpp_generator.cc \
+           src/compiler/cpp_plugin.cc \
+           -I . \
+           $(pkg-config --cflags protobuf) -lprotoc -lprotobuf \
+    && rm -rf /tmp/grpc
+
+# Verify the plugin was built
+RUN which grpc_cpp_plugin && grpc_cpp_plugin --version || echo "grpc_cpp_plugin ready"
+
+# ─── Non-root user (matches host UID/GID for volume ownership) ───────────────
+RUN groupadd -g ${GID} builder \
+    && useradd -m --no-log-init --uid ${UID} --gid ${GID} builder \
+    && usermod -aG sudo builder \
+    && echo "builder ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/builder
+
+USER builder
+
+# Enable ccache: prepend wrapper symlinks to PATH
+ENV PATH="/usr/lib/ccache:${PATH}"
+RUN mkdir -p /home/builder/.ccache
+
+WORKDIR /workspace
+
+# Default command (can be overridden)
+CMD ["/bin/bash"]

@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "release/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:22.04@sha256:4f838adc7181d9039ac795a7d0aba05a9bd9ecd480d294483169c5def983b64d
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: zion_test
+          POSTGRES_USER: zion
+          POSTGRES_PASSWORD: zion_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git pkg-config \
+            protobuf-compiler libprotobuf-dev libprotoc-dev \
+            libgrpc++-dev libgrpc-dev libssl-dev \
+            libjsoncpp-dev uuid-dev zlib1g-dev libbrotli-dev \
+            libpq-dev libc-ares-dev libspdlog-dev libgtest-dev libargon2-dev
+          # yaml-cpp 0.8.0
+          git clone --depth=1 --branch 0.8.0 https://github.com/jbeder/yaml-cpp.git /tmp/yaml-cpp
+          cmake -S /tmp/yaml-cpp -B /tmp/yaml-cpp/build -DCMAKE_INSTALL_PREFIX=/usr -DYAML_CPP_BUILD_TESTS=OFF -GNinja
+          ninja -C /tmp/yaml-cpp/build install
+          # Drogon v1.9.3
+          git clone --depth=1 --branch v1.9.3 https://github.com/drogonframework/drogon.git /tmp/drogon
+          cd /tmp/drogon && git submodule update --init --recursive
+          cmake -S . -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_CTL=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF \
+            -DUSE_POSTGRESQL=ON -DUSE_MYSQL=OFF -DUSE_SQLITE3=OFF -GNinja
+          ninja -C build install
+
+      - name: Checkout Zion-HAL (for protos)
+        uses: actions/checkout@v4
+        with:
+          repository: SiliconCentric/Zion-HAL
+          path: ../Zion-HAL
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure
+        run: cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+
+      - name: Build
+        run: ninja -C build -j$(nproc)
+
+      - name: Unit tests
+        run: ctest --test-dir build -j$(nproc) --output-on-failure -L unit
+
+      - name: Integration tests
+        env:
+          ZION_TEST_DB: postgres://zion:zion_test@postgres/zion_test
+        run: ctest --test-dir build -j$(nproc) --output-on-failure -L integration

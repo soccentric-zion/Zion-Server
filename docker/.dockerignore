@@ -1,0 +1,52 @@
+# Build directories
+build/
+bin/
+lib/
+
+# Git
+.git/
+.gitignore
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+docs/
+
+# Temporary files
+*.tmp
+*.log
+
+# Coverage reports
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Valgrind files
+callgrind.out.*
+massif.out.*
+
+# Cppcheck reports
+cppcheck_results.xml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# README and docs
+README.md
+*.md
