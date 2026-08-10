@@ -1,21 +1,13 @@
 [server]
 grpc_listen = "0.0.0.0:50051"
-http_listen = "127.0.0.1:8080"
-
-[storage]
-db_path  = "/var/lib/zion/zion.db"
-logs_dir = "/var/lib/zion/logs"
-
-[ingest]
-queue_capacity           = 100000
-batch_commit_rows        = 1000
-batch_commit_interval_ms = 1000
-
-[logs]
-fts_sources           = ["hal", "client"]
+http_listen = "127.0.0.1:8080" [storage]
+db_path = "/var/lib/zion/zion.db"
+logs_dir = "/var/lib/zion/logs" [ingest]
+queue_capacity = 100000
+batch_commit_rows = 1000
+batch_commit_interval_ms = 1000 [logs]
+fts_sources = ["hal", "client"]
 file_rotation_size_mb = 50
-file_compression      = "zstd"
-
-[metrics]
+file_compression = "zstd" [metrics]
 enabled = true
-listen  = "127.0.0.1:9100"
+listen = "127.0.0.1:9100"
