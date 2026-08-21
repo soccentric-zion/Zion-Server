@@ -42,6 +42,10 @@ For a full local stack, use `docker/setup.sh` and the documented Compose files. 
 ## Limitations
 
 No PostgreSQL stack, authenticated API, dashboard client, embedded stream, OTA artifact, SSE tail, or production deployment was manually verified. Status notes in `req.md`, `AUDIT.md`, and related documents may identify additional gaps.
+
+## Detailed Reference
+
+The retained server guide below contains the repository's extended architecture, setup, API, configuration, and runtime notes.
 # Zion Server The **Zion Server** is the central orchestration and data-collection backend for the Zion IV&V (Independent Validation & Verification) tool suite. It exposes: - A **gRPC service** (`HalService`) for the embedded HAL Client App to submit test results and receive streaming commands.
 - A **REST/HTTP API** (`/api/v1`) for the Web UI and external tooling.
 - A **PostgreSQL** backend with versioned migrations.
