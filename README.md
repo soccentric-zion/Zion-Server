@@ -1,3 +1,47 @@
+# Zion-Server
+
+## Project Summary
+
+Migration behavior and API authentication should be checked together because a passing compile does not establish a usable database-backed service.
+
+The source organization shows the intended service boundaries, while the test preset and CI configuration provide the executable checks. Runtime claims still depend on PostgreSQL, secrets, generated protobuf code, and a compatible Client or Dashboard.
+
+Zion-Server is the central local orchestration and data-collection backend for the Zion IV&V system. It is a C++ service built with CMake and vcpkg-oriented dependencies, with Docker/dev-container support, configuration and logging internals, PostgreSQL migrations, gRPC service implementations, REST controllers, repositories, orchestration services, and module registry code. The architecture has two ingress paths: a HalService gRPC endpoint for embedded Zion-Client devices and a `/api/v1` HTTP API for the dashboard and external tooling. The source tree names services for clients, HAL, runs, schedules, logs, authentication, OTA, alerts, notifications, settings, backup, and health, while migrations cover users/targets, runs/results/logs, OTA, audit, notifications, alerts, settings, and result fields. Configuration uses environment variables and/or `etc/zion/server.toml`, with listen addresses, PostgreSQL settings, session secret, registry path, OTA storage, and log level. Docker Compose is the recommended development path; native CMake presets cover debug, release, test, and ASan builds. The repository also contains CI workflows and scripts for protobuf generation, development startup, and database seeding. Existing status notes distinguish an initial skeleton from later database, ingestion, gRPC, and orchestration steps, so this README does not infer production readiness from header breadth. The table records implementation surfaces and named commands while keeping live database, authentication, device streaming, REST, OTA, and SSE checks manual.
+
+## Feature Status
+
+| # | Name / Description | Implemented? | Test Coverage? | Manual Test |
+|---:|---|---|---|---|
+| 1 | CMake presets and native build | Implemented | CI/build commands documented; not run | [ ] Manual verification required |
+| 2 | Docker Compose development environment | Implemented | Docker workflow not verified | [ ] Manual verification required |
+| 3 | TOML/environment configuration | Implemented | `config-test` documented | [ ] Manual verification required |
+| 4 | Structured logging | Implemented | Dedicated coverage unknown | [ ] Manual verification required |
+| 5 | PostgreSQL client and startup migrations | Implemented | Migration/test breadth unknown | [ ] Manual verification required |
+| 6 | gRPC client and HAL services | Implemented | Integration status unknown | [ ] Manual verification required |
+| 7 | REST API controllers and auth | Implemented | Test target exists; endpoint breadth unknown | [ ] Manual verification required |
+| 8 | Run/result/log repositories | Implemented | Repository tests not confirmed | [ ] Manual verification required |
+| 9 | Scheduling and run orchestration | Partial | Coverage unknown | [ ] Manual verification required |
+| 10 | OTA storage and orchestration | Partial | Coverage unknown | [ ] Manual verification required |
+| 11 | SSE live log tails and notifications | Partial | Coverage unknown | [ ] Manual verification required |
+| 12 | Module registry and target heartbeat | Implemented | Integration status unknown | [ ] Manual verification required |
+| 13 | CI, Docker, seed, and protobuf scripts | Implemented | CI not executed in this scan | [ ] Manual verification required |
+
+## Tests and Commands
+
+```bash
+cmake --preset debug
+cmake --build build/debug
+cmake --preset test
+cmake --build build/test
+ctest --test-dir build/test --output-on-failure
+cmake --build build --target config-test
+```
+
+For a full local stack, use `docker/setup.sh` and the documented Compose files. Protect secrets in `.env`.
+
+## Limitations
+
+No PostgreSQL stack, authenticated API, dashboard client, embedded stream, OTA artifact, SSE tail, or production deployment was manually verified. Status notes in `req.md`, `AUDIT.md`, and related documents may identify additional gaps.
 # Zion Server The **Zion Server** is the central orchestration and data-collection backend for the Zion IV&V (Independent Validation & Verification) tool suite. It exposes: - A **gRPC service** (`HalService`) for the embedded HAL Client App to submit test results and receive streaming commands.
 - A **REST/HTTP API** (`/api/v1`) for the Web UI and external tooling.
 - A **PostgreSQL** backend with versioned migrations.
