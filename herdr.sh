@@ -13,11 +13,12 @@
 #   project repo (has Project/)         session "<repo-name lowercased>"
 #                                       + one workspace per leaf in Project/
 #   leaf repo    (neither)              session "<repo-name lowercased>"
-#                                       no extra workspaces
+#                                       no child workspaces
 #
-# If the session already exists the script skips creation entirely and just
-# attaches. Each workspace gets a single shell at its repo root — no extra
-# tabs, panes, processes or agents.
+# The first workspace is always this repo itself; children follow in name
+# order. If the session already exists the script skips creation entirely and
+# just attaches. Each workspace gets a single shell at its repo root — no
+# extra tabs, panes, processes or agents.
 
 set -Eeuo pipefail
 
@@ -66,27 +67,23 @@ if session_exists; then
     exec herdr session attach "$SESSION"
 fi
 
-# ── Enumerate children ────────────────────────────────────────────────────────
-CHILDREN=()
+# ── Plan the workspaces ───────────────────────────────────────────────────────
+# This repo always comes first, so the session opens on the parent rather than
+# on whichever child happens to sort earliest. Children follow in name order;
+# a leaf has none.
+WORKSPACES=("$REPO_DIR")
 if [[ -n "$CHILD_DIR" && -d "$CHILD_DIR" ]]; then
     for child in "$CHILD_DIR"/*/; do
         [[ -d "$child" ]] || continue
-        CHILDREN+=("${child%/}")
+        WORKSPACES+=("${child%/}")
     done
 fi
 
-# Leaf repo, or a tier whose children are not cloned yet: attaching from the
-# repo root is enough — Herdr opens the session with one shell here.
-if [[ ${#CHILDREN[@]} -eq 0 ]]; then
-    note "creating session '$SESSION'."
-    cd "$REPO_DIR"
-    exec herdr session attach "$SESSION"
-fi
-
-# ── Bootstrap: headless server, then one workspace per child ──────────────────
+# ── Bootstrap: headless server, then one workspace each ───────────────────────
 # The workspaces must exist before a client attaches, so bring the session up
 # headless first and talk to it over its socket.
-note "creating session '$SESSION' with ${#CHILDREN[@]} workspaces."
+plural=s; [[ ${#WORKSPACES[@]} -eq 1 ]] && plural=""
+note "creating session '$SESSION' with ${#WORKSPACES[@]} workspace${plural}."
 cd "$REPO_DIR"
 nohup herdr --session "$SESSION" server >/dev/null 2>&1 &
 
@@ -100,12 +97,12 @@ for _ in $(seq 1 60); do
 done
 [[ $ready -eq 1 ]] || die "timed out waiting for the '$SESSION' server to start."
 
-for child in "${CHILDREN[@]}"; do
-    label="$(basename "$child")"
-    # --no-focus keeps creation order from stealing focus; the first workspace
-    # stays selected so attaching lands at the top of the list.
+for workspace in "${WORKSPACES[@]}"; do
+    label="$(basename "$workspace")"
+    # --no-focus keeps creation order from stealing focus, so this repo's own
+    # workspace stays selected and attaching lands there.
     if ! herdr --session "$SESSION" workspace create \
-        --cwd "$child" --label "$label" --no-focus >/dev/null 2>&1; then
+        --cwd "$workspace" --label "$label" --no-focus >/dev/null 2>&1; then
         note "warning: could not create workspace '$label'."
     fi
 done
