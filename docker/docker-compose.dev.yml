@@ -1,1 +1,74 @@
-version: "3.8" services: # PostgreSQL database postgres: image: postgres:16-alpine container_name: zion-postgres environment: POSTGRES_DB: zion POSTGRES_USER: zion POSTGRES_PASSWORD: zion_dev ports: - "5432:5432" volumes: - zion_pgdata:/var/lib/postgresql/data healthcheck: test: ["CMD-SHELL", "pg_isready -U zion"] interval: 5s timeout: 5s retries: 10 networks: - zion-net # Development build container (auto-detects platform) zion-dev: build: context: .. dockerfile: docker/Dockerfile.unified args: UID: ${UID:-1000} GID: ${GID:-1000} # Auto-detect platform: buildx will use the host architecture platforms: - linux/amd64 - linux/arm64 container_name: zion-dev depends_on: postgres: condition: service_healthy env_file: - ../.env environment: # Override DB connection to use Docker network ZION_DB_HOST: postgres ZION_DB_PORT: 5432 # Enable ccache CCACHE_DIR:/home/builder/.ccache volumes: # Mount source code - ..:/workspace:rw # Persistent ccache - zion_ccache:/home/builder/.ccache # Persistent build directory (speeds up rebuilds) - zion_build:/workspace/build working_dir:/workspace ports: - "50051:50051" # gRPC - "8080:8080" # HTTP/REST - "9100:9100" # Prometheus metrics networks: - zion-net # Keep container running for development command: tail -f/dev/null stdin_open: true tty: true networks: zion-net: driver: bridge volumes: zion_pgdata: zion_ccache: zion_build:
+version: "3.8"
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: zion-postgres
+    environment:
+      POSTGRES_DB: zion
+      POSTGRES_USER: zion
+      POSTGRES_PASSWORD: zion_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - zion_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zion"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - zion-net
+
+  # Development build container (auto-detects platform)
+  zion-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.unified
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+      # Auto-detect platform: buildx will use the host architecture
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    container_name: zion-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      # Override DB connection to use Docker network
+      ZION_DB_HOST: postgres
+      ZION_DB_PORT: 5432
+      # Enable ccache
+      CCACHE_DIR: /home/builder/.ccache
+    volumes:
+      # Mount source code
+      - ..:/workspace:rw
+      # Persistent ccache
+      - zion_ccache:/home/builder/.ccache
+      # Persistent build directory (speeds up rebuilds)
+      - zion_build:/workspace/build
+    working_dir: /workspace
+    ports:
+      - "50051:50051"  # gRPC
+      - "8080:8080"    # HTTP/REST
+      - "9100:9100"    # Prometheus metrics
+    networks:
+      - zion-net
+    # Keep container running for development
+    command: tail -f /dev/null
+    stdin_open: true
+    tty: true
+
+networks:
+  zion-net:
+    driver: bridge
+
+volumes:
+  zion_pgdata:
+  zion_ccache:
+  zion_build:

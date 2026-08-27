@@ -26,7 +26,7 @@ DOCKER_SRC_DIR         := /workspace/Zion-Client
 DOCKER_CROSS_BUILD_DIR := $(DOCKER_SRC_DIR)/build/cross
 
 # Server (x86 Ubuntu) Docker settings - use the unified image we just built
-DOCKER_SERVER_IMAGE     := zion-dev
+DOCKER_SERVER_IMAGE     := zion-server
 DOCKER_SERVER_SRC_DIR   := /workspace/Zion-Server
 DOCKER_SERVER_BUILD_DIR := $(DOCKER_SERVER_SRC_DIR)/build/docker
 
