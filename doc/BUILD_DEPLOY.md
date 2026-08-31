@@ -6,7 +6,7 @@ Zion-Server is the C++20 local orchestration/data-plane service. It generates pr
 ## 1. Prerequisites
 - Linux with CMake >= 3.22, C++20 compiler, Make, protobuf/protoc, `grpc_cpp_plugin`, Drogon, spdlog, yaml-cpp, GoogleTest, OpenSSL, Argon2, and PostgreSQL client/runtime dependencies.
 - The sibling `../Zion-HAL/protos` tree is required for code generation.
-- Docker/Compose is recommended for PostgreSQL and the development toolchain; native setup may use `local_install.sh` and `VCPKG_ROOT`.
+- Docker/Compose is used for PostgreSQL, the development toolchain, and the build itself (no native toolchain setup is required).
 
 ```bash
 cp .env.example .env
@@ -45,7 +45,7 @@ docker compose -f docker/docker-compose.yml up postgres -d
 ./scripts/run_dev.sh
 ./build/debug/zion-server --config etc/zion/server.toml --log-level debug
 ```
-For the full local container flow use `docker compose -f docker/docker-compose.yml up --build`. The `.env.example` defaults document HTTP 8080, gRPC 50051, optional metrics 9100, PostgreSQL 5432, registry path, OTA storage, CORS, and auth settings. `local_install.sh` is conditional, Ubuntu-focused, needs sudo/network/disk, and may build yaml-cpp, Drogon, and grpc_cpp_plugin from source.
+For the full local container flow use `docker compose -f docker/docker-compose.yml up --build`. The `.env.example` defaults document HTTP 8080, gRPC 50051, optional metrics 9100, PostgreSQL 5432, registry path, OTA storage, CORS, and auth settings. The Docker build image contains the toolchain (yaml-cpp, Drogon, gRPC) — no native host toolchain setup is needed.
 
 ## 7. Cleanup
 Use the relevant CMake build directory removal or reconfigure it; Docker cleanup is through `cd docker && make down` and image cleanup targets. PostgreSQL data is in the Compose volume and is intentionally preserved by normal `down`; deleting volumes is destructive. Remove local `.env` and generated build outputs deliberately.

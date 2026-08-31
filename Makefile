@@ -1,15 +1,14 @@
 # Master Makefile for ACU Full Test Project
-# Supports both native and Docker-based builds with Ninja
+# Docker-based builds: the default (and only) build path is Docker.
 
 .DEFAULT_GOAL := help
 
-.PHONY: all build configure clean test format cppcheck doc help
+.PHONY: all build clean test format cppcheck doc help
 .PHONY: docker-build docker-configure docker-clean docker-shell docker-install docker-image docker-test
 .PHONY: docker-image-server docker-build-server docker-test-server docker-clean-server docker-shell-server
-.PHONY: deploy deploy-a deploy-b run run-a run-b list setup-completion
+.PHONY: deploy deploy-a deploy-b run-a run-b list setup-completion
 
 # Build directories (separate to avoid CMake cache conflicts)
-NATIVE_BUILD_DIR := build/native
 CROSS_BUILD_DIR  := build/cross
 
 # Parallel jobs (override with make JOBS=N)
@@ -45,7 +44,7 @@ SSH := $(SSHPASS) ssh -o StrictHostKeyChecking=no
 SCP := $(SSHPASS) scp -o StrictHostKeyChecking=no
 
 # Default target
-all: docker-build ## Alias for docker-build (default)
+all: docker-build-server ## Default target: x86 production build (Docker)
 
 # Deploy to remote target: $(1)=IP address
 define deploy_remote
@@ -71,42 +70,12 @@ define run_remote
 	fi
 endef
 
-define run_local
-	@APP="$(word 2, $(MAKECMDGOALS))"; \
-	ARGS="$(wordlist 3, $(words $(MAKECMDGOALS)), $(MAKECMDGOALS))"; \
-	if [ -z "$$APP" ]; then \
-		echo "Running all test applications locally..."; \
-		for name in $$(ls $(NATIVE_BUILD_DIR)/bin/); do \
-			echo "--- Running $$name ---"; \
-			$(if $(V),echo "LD_LIBRARY_PATH=$(NATIVE_BUILD_DIR)/lib $(NATIVE_BUILD_DIR)/bin/$$name";) \
-			LD_LIBRARY_PATH=$(NATIVE_BUILD_DIR)/lib $(NATIVE_BUILD_DIR)/bin/$$name || true; \
-		done; \
-	else \
-		echo "Running $$APP locally with args: $$ARGS"; \
-		$(if $(V),echo "LD_LIBRARY_PATH=$(NATIVE_BUILD_DIR)/lib $(NATIVE_BUILD_DIR)/bin/$$APP $$ARGS";) \
-		LD_LIBRARY_PATH=$(NATIVE_BUILD_DIR)/lib $(NATIVE_BUILD_DIR)/bin/$$APP $$ARGS; \
-	fi
-endef
-
 # =============================================================================
-# Native builds (host architecture)
+# Build & test (Docker)
 # =============================================================================
 
-configure: ## Configure the project with CMake/Ninja
-	@echo "Configuring project with Ninja..."
-	mkdir -p $(NATIVE_BUILD_DIR)
-	cd $(NATIVE_BUILD_DIR) && cmake -GNinja -DBUILD_TESTS=ON $(CURDIR)
-
-build: configure ## Build the project (configures if needed)
-	@echo "Building project with Ninja..."
-	cd $(NATIVE_BUILD_DIR) && ninja -j$(JOBS)
-
-test: build ## Run tests
-	@echo "Running tests natively..."
-	cd $(NATIVE_BUILD_DIR) && ctest --output-on-failure
-
-run: build ## Run test app locally (usage: make run [name] [args...], no args = run all)
-	$(call run_local)
+build: docker-build-server ## Build the Server (x86) in Docker
+test: docker-test-server ## Run server unit tests in Docker (x86)
 
 # =============================================================================
 # Common for native and Cross
@@ -117,8 +86,6 @@ clean: ## Remove build directory
 	rm -rf build
 
 list: ## List available test applications
-	@echo "Native ($(NATIVE_BUILD_DIR)):"
-	@ls -1 $(NATIVE_BUILD_DIR)/bin/ 2>/dev/null | sed 's/^/    /' || echo "    (none - run 'make build' first)"
 	@echo "Cross ($(CROSS_BUILD_DIR)):"
 	@ls -1 $(CROSS_BUILD_DIR)/bin/ 2>/dev/null | sed 's/^/    /' || echo "    (none - run 'make docker-build' first)"
 
@@ -222,22 +189,20 @@ run-b: deploy-b ## Run test app on $(IP_B) (usage: make run-b [name] [args...], 
 	$(call run_remote,$(IP_B))
 
 # =============================================================================
-# Code quality & Docs
+# Code quality & Docs (run inside the Docker build container)
 # =============================================================================
 
-format: configure ## Format code with clang-format
-	@echo "Formatting code..."
-	cd $(NATIVE_BUILD_DIR) && ninja format
-	@echo "Formatting CMake files..."
-	find . -name CMakeLists.txt -not -path './build/*' | xargs cmake-format -i
+format: docker-image ## Format code with clang-format (in Docker)
+	@echo "Running clang-format in Docker..."
+	$(DOCKER_RUN) "cd $(DOCKER_CROSS_BUILD_DIR) && ninja format"
 
-cppcheck: configure ## Run static analysis with cppcheck
-	@echo "Running cppcheck static analysis..."
-	cd $(NATIVE_BUILD_DIR) && ninja cppcheck
+cppcheck: docker-image ## Run static analysis with cppcheck (in Docker)
+	@echo "Running cppcheck in Docker..."
+	$(DOCKER_RUN) "cd $(DOCKER_CROSS_BUILD_DIR) && ninja cppcheck"
 
-doc: configure ## Generate Doxygen documentation
-	@echo "Generating documentation..."
-	cd $(NATIVE_BUILD_DIR) && ninja doc_doxygen
+doc: docker-image ## Generate Doxygen documentation (in Docker)
+	@echo "Generating documentation in Docker..."
+	$(DOCKER_RUN) "cd $(DOCKER_CROSS_BUILD_DIR) && ninja doc_doxygen"
 
 # =============================================================================
 # Misc
