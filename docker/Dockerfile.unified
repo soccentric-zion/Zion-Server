@@ -30,6 +30,8 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev libspdlog-dev libgtest-dev libargon2-dev \
     # Debugging utilities
     vim htop curl iputils-ping net-tools \
+    # Code quality & docs tools
+    clang-format cppcheck doxygen \
     # Boost (if needed)
     libboost-system-dev libboost-date-time-dev \
     && rm -rf /var/lib/apt/lists/*

@@ -24,6 +24,9 @@ RUN apt-get update && apt-get install -y \
     ninja-build \
     vim \
     htop \
+    clang-format \
+    cppcheck \
+    doxygen \
     libboost-system-dev \
     libboost-date-time-dev \
     && rm -rf /var/lib/apt/lists/*

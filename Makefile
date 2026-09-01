@@ -87,7 +87,7 @@ clean: ## Remove build directory
 
 list: ## List available test applications
 	@echo "Cross ($(CROSS_BUILD_DIR)):"
-	@ls -1 $(CROSS_BUILD_DIR)/bin/ 2>/dev/null | sed 's/^/    /' || echo "    (none - run 'make docker-build' first)"
+	@ls -1 $(Zion_ROOT)/Zion-Client/build/cross/bin/ 2>/dev/null | sed 's/^/    /' || echo "    (none - run 'make docker-build' first)"
 
 # =============================================================================
 # Cross builds (Docker)
@@ -128,7 +128,7 @@ docker-build: docker-image ## Build project with Docker/Ninja
 
 docker-test: docker-build
 	@echo "Running tests in Docker (ARM64 via QEMU)..."
-	$(DOCKER_RUN) "cd $(DOCKER_CROSS_BUILD_DIR) && ctest --output-on-failure"
+	$(DOCKER_RUN) "cd $(DOCKER_CROSS_BUILD_DIR) && ninja -j$(DOCKER_JOBS) && ninja -j$(DOCKER_JOBS) \$$(ninja -t targets all | grep -oE 'zion_hal_build/bin/test_[a-zA-Z0-9_]+' | sort -u | sed 's|zion_hal_build/bin/||') && ctest --output-on-failure"
 
 docker-clean: docker-image ## Clean Docker build artifacts
 	@echo "Cleaning Docker build directory..."
